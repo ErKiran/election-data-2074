@@ -60,14 +60,14 @@ func convertJSONToCSV(electionData []ElectionData, destination string) error {
 	writer := csv.NewWriter(outputFile)
 	defer writer.Flush()
 
-	header := []string{"PartyID", "StateID", "CandidateName", "Gender", "Age", "PoliticalPartyName", "DistrictName", "LocalBodyName", "WardNo", "PostName", "SerialNo", "TotalVotesReceived", "EStatus", "Rank"}
+	header := []string{"SerialNo", "PartyID", "StateID", "CandidateName", "Gender", "Age", "PoliticalPartyName", "DistrictName", "LocalBodyName", "WardNo", "PostName", "TotalVotesReceived", "EStatus", "Rank"}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
 
 	for _, e := range electionData {
 		var csvRow []string
-		csvRow = append(csvRow, strconv.Itoa(e.Partyid), strconv.Itoa(e.Stateid), e.Candidatename, e.Gender, strconv.Itoa(e.Age), e.Politicalpartyname, e.Districtname, e.Localbodyname, e.Wardno, e.Postname, strconv.Itoa(e.Serialno), strconv.Itoa(e.Totalvotesrecieved), e.Estatus, strconv.Itoa(e.Rank))
+		csvRow = append(csvRow, strconv.Itoa(e.Serialno), strconv.Itoa(e.Partyid), strconv.Itoa(e.Stateid), e.Candidatename, e.Gender, strconv.Itoa(e.Age), e.Politicalpartyname, e.Districtname, e.Localbodyname, e.Wardno, e.Postname, strconv.Itoa(e.Totalvotesrecieved), e.Estatus, strconv.Itoa(e.Rank))
 		if err := writer.Write(csvRow); err != nil {
 			return err
 		}
