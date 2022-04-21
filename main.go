@@ -84,13 +84,23 @@ func main() {
 
 	var mainMap = make(map[string][]ElectionData)
 
+	stateMap := map[string]string{
+		"1": "प्रदेश नं. १",
+		"2": "मधेश प्रदेश",
+		"3": "वाग्मती प्रदेश",
+		"4": "गण्डकी प्रदेश",
+		"5": "लुम्बिनी प्रदेश",
+		"6": "कर्णाली प्रदेश",
+		"7": "सुदूरपश्चिम प्रदेश",
+	}
+
 	for _, data := range electionData {
-		mainMap[fmt.Sprintf("%d-%s-%s-%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)] = append(mainMap[fmt.Sprintf("%d-%s-%s-%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)], data)
+		mainMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)] = append(mainMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)], data)
 	}
 
 	for key, value := range mainMap {
-		all := strings.Split(key, "-")
-		fileName := fmt.Sprintf("local-level-election/result/%s/%s/%s/", all[0], all[1], all[2])
+		all := strings.Split(key, "__")
+		fileName := fmt.Sprintf("local-level-election/result/%s/%s/%s/", stateMap[all[0]], all[1], all[2])
 		if _, err := os.Stat(fileName); os.IsNotExist(err) {
 			err := os.MkdirAll(fileName, os.ModePerm)
 			if err != nil {
