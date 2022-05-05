@@ -9,6 +9,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/go-echarts/go-echarts/v2/charts"
+	"github.com/go-echarts/go-echarts/v2/components"
+	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
 type ElectionData struct {
@@ -83,6 +87,7 @@ func main() {
 	}
 
 	var mainMap = make(map[string][]ElectionData)
+	var wardMap = make(map[string][]ElectionData)
 
 	stateMap := map[string]string{
 		"1": "प्रदेश नं. १",
@@ -95,8 +100,20 @@ func main() {
 	}
 
 	for _, data := range electionData {
+		if strings.Contains(data.Politicalpartyname, "नेपाल कम्युनिष्ट पार्टी") {
+			data.Politicalpartyname = strings.ReplaceAll(data.Politicalpartyname, "नेपाल कम्युनिष्ट पार्टी", "नेकपा")
+		}
+		if data.Politicalpartyname == "नेकपा (एकीकृत मार्क्सवादी-लेनिनवादी)" {
+			data.Politicalpartyname = "नेकपा (एमाले)"
+		}
+		if data.Wardno != "" {
+			wardMap[fmt.Sprintf("%d__%s__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname, data.Wardno)] = append(wardMap[fmt.Sprintf("%d__%s__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname, data.Wardno)], data)
+		}
 		mainMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)] = append(mainMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)], data)
 	}
+	var allCharts []*charts.Pie
+	var localLevelChartMap = make(map[string][]*charts.Pie)
+	var districtLevelChartMap = make(map[string][]*charts.Pie)
 
 	for key, value := range mainMap {
 		all := strings.Split(key, "__")
@@ -107,6 +124,15 @@ func main() {
 				log.Println(err)
 			}
 		}
+		var pie *charts.Pie
+		pie = PieChart(value, fmt.Sprintf("%s(%s)-%s", all[2], all[1], all[3]))
+		allCharts = append(allCharts, pie)
+		if all[3] == "प्रमुख" || all[3] == "अध्यक्ष" {
+			districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])] = append(districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])], pie)
+		}
+		if all[3] == "प्रमुख" || all[3] == "अध्यक्ष" || all[3] == "उपाध्यक्ष" || all[3] == "उपप्रमुख" {
+			localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])] = append(localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])], pie)
+		}
 		csvFileName := fmt.Sprintf("%s%s.csv", fileName, all[3])
 		os.Create(csvFileName)
 		if err := convertJSONToCSV(value, csvFileName); err != nil {
@@ -114,4 +140,76 @@ func main() {
 		}
 		fmt.Println("fileName", fileName)
 	}
+
+	for key, value := range wardMap {
+		all := strings.Split(key, "__")
+		if all[3] == "वडा अध्यक्ष" {
+			var pie *charts.Pie
+			pie = PieChart(value, fmt.Sprintf("%s(%s)-%s(%s)", all[2], all[1], all[3], all[4]))
+			allCharts = append(allCharts, pie)
+			localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])] = append(localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])], pie)
+		}
+
+	}
+
+	for key, value := range localLevelChartMap {
+		all := strings.Split(key, "__")
+		fileName := fmt.Sprintf("local-level-election/result/%s/%s/%s/", all[0], all[1], all[2])
+		if _, err := os.Stat(fileName); os.IsNotExist(err) {
+			err := os.MkdirAll(fileName, os.ModePerm)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+		CreateHTML(value, fileName)
+	}
+
+	for key, value := range districtLevelChartMap {
+		all := strings.Split(key, "__")
+		fileName := fmt.Sprintf("local-level-election/result/%s/%s/", all[0], all[1])
+		if _, err := os.Stat(fileName); os.IsNotExist(err) {
+			err := os.MkdirAll(fileName, os.ModePerm)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+		CreateHTML(value, fileName)
+	}
+
+}
+
+func PieChart(aggregateDate []ElectionData, title string) *charts.Pie {
+	pie := charts.NewPie()
+	pie.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{Title: title, Right: "20"}),
+	)
+
+	pie.AddSeries("pie", generatePieItems(aggregateDate)).
+		SetSeriesOptions(charts.WithLabelOpts(
+			opts.Label{
+				Show:      true,
+				Formatter: "{b}: {c}",
+			}),
+		)
+	return pie
+}
+
+func generatePieItems(sector []ElectionData) []opts.PieData {
+	items := make([]opts.PieData, 0)
+	for _, v := range sector {
+		items = append(items, opts.PieData{Value: v.Totalvotesrecieved, Name: fmt.Sprintf("%s- %s", v.Candidatename, v.Politicalpartyname)})
+	}
+	return items
+}
+
+func CreateHTML(pieChart []*charts.Pie, fileName string) {
+	page := components.NewPage()
+	for _, v := range pieChart {
+		page.AddCharts(v)
+	}
+	f, err := os.Create(fmt.Sprintf("%s%s.html", fileName, "result"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	page.Render(f)
 }
