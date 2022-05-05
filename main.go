@@ -32,6 +32,12 @@ type ElectionData struct {
 	Rank               int    `json:"Rank"`
 }
 
+type AggregateData struct {
+	PartyName string `json:"PartyName"`
+	PostName  string `json:"PostName"`
+	WinCount  int    `json:"WinCount"`
+}
+
 func ReadAndParseData() ([]ElectionData, error) {
 	jsonFile, err := os.Open("./local-level-election/raw/alldata.json")
 
@@ -88,6 +94,7 @@ func main() {
 
 	var mainMap = make(map[string][]ElectionData)
 	var wardMap = make(map[string][]ElectionData)
+	var winMap = make(map[string][]ElectionData)
 
 	stateMap := map[string]string{
 		"1": "प्रदेश नं. १",
@@ -106,11 +113,19 @@ func main() {
 		if data.Politicalpartyname == "नेकपा (एकीकृत मार्क्सवादी-लेनिनवादी)" {
 			data.Politicalpartyname = "नेकपा (एमाले)"
 		}
+		if data.Estatus == "E" {
+			post := data.Postname
+			if post == "दलित महिला सदस्य" || post == "महिला सदस्य" || post == "सदस्य" {
+				post = "सदस्य"
+			}
+			winMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, post)] = append(winMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, post)], data)
+		}
 		if data.Wardno != "" {
 			wardMap[fmt.Sprintf("%d__%s__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname, data.Wardno)] = append(wardMap[fmt.Sprintf("%d__%s__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname, data.Wardno)], data)
 		}
 		mainMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)] = append(mainMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, data.Postname)], data)
 	}
+
 	var allCharts []*charts.Pie
 	var localLevelChartMap = make(map[string][]*charts.Pie)
 	var districtLevelChartMap = make(map[string][]*charts.Pie)
@@ -125,7 +140,7 @@ func main() {
 			}
 		}
 		var pie *charts.Pie
-		pie = PieChart(value, fmt.Sprintf("%s(%s)-%s", all[2], all[1], all[3]))
+		pie = PieChart(value, fmt.Sprintf("%s(%s)-%s", all[2], all[1], all[3]), false)
 		allCharts = append(allCharts, pie)
 		if all[3] == "प्रमुख" || all[3] == "अध्यक्ष" {
 			districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])] = append(districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])], pie)
@@ -138,18 +153,31 @@ func main() {
 		if err := convertJSONToCSV(value, csvFileName); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("fileName", fileName)
+	}
+
+	for key, value := range winMap {
+		all := strings.Split(key, "__")
+		if all[3] == "वडा अध्यक्ष" || all[3] == "सदस्य" {
+			tC := make(map[string]int)
+			for _, data := range value {
+				tC[data.Politicalpartyname]++
+			}
+			fmt.Println("value", tC)
+			var pie *charts.Pie
+			pie = PieChartAgg(tC, fmt.Sprintf("%s(%s)-%s", all[2], all[1], all[3]), true)
+			allCharts = append(allCharts, pie)
+			localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])] = append(localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])], pie)
+		}
 	}
 
 	for key, value := range wardMap {
 		all := strings.Split(key, "__")
 		if all[3] == "वडा अध्यक्ष" {
 			var pie *charts.Pie
-			pie = PieChart(value, fmt.Sprintf("%s(%s)-%s(%s)", all[2], all[1], all[3], all[4]))
+			pie = PieChart(value, fmt.Sprintf("%s(%s)-%s(%s)", all[2], all[1], all[3], all[4]), false)
 			allCharts = append(allCharts, pie)
 			localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])] = append(localLevelChartMap[fmt.Sprintf("%s__%s__%s", stateMap[all[0]], all[1], all[2])], pie)
 		}
-
 	}
 
 	for key, value := range localLevelChartMap {
@@ -178,13 +206,21 @@ func main() {
 
 }
 
-func PieChart(aggregateDate []ElectionData, title string) *charts.Pie {
+func generatePieItemsAgg(sector map[string]int, isAggregated bool) []opts.PieData {
+	items := make([]opts.PieData, 0)
+	for k, v := range sector {
+		items = append(items, opts.PieData{Value: v, Name: k})
+	}
+	return items
+}
+
+func PieChartAgg(aggregateDate map[string]int, title string, isAggregated bool) *charts.Pie {
 	pie := charts.NewPie()
 	pie.SetGlobalOptions(
 		charts.WithTitleOpts(opts.Title{Title: title, Right: "20"}),
 	)
 
-	pie.AddSeries("pie", generatePieItems(aggregateDate)).
+	pie.AddSeries("pie", generatePieItemsAgg(aggregateDate, isAggregated)).
 		SetSeriesOptions(charts.WithLabelOpts(
 			opts.Label{
 				Show:      true,
@@ -194,10 +230,33 @@ func PieChart(aggregateDate []ElectionData, title string) *charts.Pie {
 	return pie
 }
 
-func generatePieItems(sector []ElectionData) []opts.PieData {
+func PieChart(aggregateDate []ElectionData, title string, isAggregated bool) *charts.Pie {
+	pie := charts.NewPie()
+	pie.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{Title: title, Right: "20"}),
+	)
+
+	pie.AddSeries("pie", generatePieItems(aggregateDate, isAggregated)).
+		SetSeriesOptions(charts.WithLabelOpts(
+			opts.Label{
+				Show:      true,
+				Formatter: "{b}: {c}",
+			}),
+		)
+	return pie
+}
+
+func generatePieItems(sector []ElectionData, isAggregated bool) []opts.PieData {
 	items := make([]opts.PieData, 0)
 	for _, v := range sector {
-		items = append(items, opts.PieData{Value: v.Totalvotesrecieved, Name: fmt.Sprintf("%s- %s", v.Candidatename, v.Politicalpartyname)})
+		var value int
+		var name string
+		name = fmt.Sprintf("%s- %s", v.Candidatename, v.Politicalpartyname)
+		value = v.Totalvotesrecieved
+		if isAggregated {
+			name = v.Politicalpartyname
+		}
+		items = append(items, opts.PieData{Value: value, Name: name})
 	}
 	return items
 }
