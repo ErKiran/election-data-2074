@@ -95,6 +95,9 @@ func main() {
 	var mainMap = make(map[string][]ElectionData)
 	var wardMap = make(map[string][]ElectionData)
 	var winMap = make(map[string][]ElectionData)
+	var winMapDistrict = make(map[string][]ElectionData)
+	var winMapProvience = make(map[string][]ElectionData)
+	var winMapCountry = make(map[string][]ElectionData)
 
 	stateMap := map[string]string{
 		"1": "प्रदेश नं. १",
@@ -118,6 +121,9 @@ func main() {
 			if post == "दलित महिला सदस्य" || post == "महिला सदस्य" || post == "सदस्य" {
 				post = "सदस्य"
 			}
+			winMapCountry[post] = append(winMapCountry[post], data)
+			winMapProvience[fmt.Sprintf("%d__%s", data.Stateid, post)] = append(winMapProvience[fmt.Sprintf("%d__%s", data.Stateid, post)], data)
+			winMapDistrict[fmt.Sprintf("%d__%s__%s", data.Stateid, data.Districtname, post)] = append(winMapDistrict[fmt.Sprintf("%d__%s__%s", data.Stateid, data.Districtname, post)], data)
 			winMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, post)] = append(winMap[fmt.Sprintf("%d__%s__%s__%s", data.Stateid, data.Districtname, data.Localbodyname, post)], data)
 		}
 		if data.Wardno != "" {
@@ -129,6 +135,43 @@ func main() {
 	var allCharts []*charts.Pie
 	var localLevelChartMap = make(map[string][]*charts.Pie)
 	var districtLevelChartMap = make(map[string][]*charts.Pie)
+	var stateLevelChartMap = make(map[string][]*charts.Pie)
+	var countryLevelChartMap = make(map[string][]*charts.Pie)
+
+	for key, value := range winMapCountry {
+		tC := make(map[string]int)
+		for _, data := range value {
+			tC[data.Politicalpartyname]++
+		}
+		var pie *charts.Pie
+		pie = PieChartAgg(tC, key, true)
+		allCharts = append(allCharts, pie)
+		countryLevelChartMap["all"] = append(countryLevelChartMap["all"], pie)
+	}
+
+	for key, value := range winMapProvience {
+		all := strings.Split(key, "__")
+		tC := make(map[string]int)
+		for _, data := range value {
+			tC[data.Politicalpartyname]++
+		}
+		var pie *charts.Pie
+		pie = PieChartAgg(tC, fmt.Sprintf("%s(%s)", stateMap[all[0]], all[1]), true)
+		allCharts = append(allCharts, pie)
+		stateLevelChartMap[fmt.Sprintf("%s", stateMap[all[0]])] = append(stateLevelChartMap[fmt.Sprintf("%s", stateMap[all[0]])], pie)
+	}
+
+	for key, value := range winMapDistrict {
+		all := strings.Split(key, "__")
+		tC := make(map[string]int)
+		for _, data := range value {
+			tC[data.Politicalpartyname]++
+		}
+		var pie *charts.Pie
+		pie = PieChartAgg(tC, fmt.Sprintf("%s(%s)", all[2], all[1]), true)
+		allCharts = append(allCharts, pie)
+		districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])] = append(districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])], pie)
+	}
 
 	for key, value := range mainMap {
 		all := strings.Split(key, "__")
@@ -162,7 +205,6 @@ func main() {
 			for _, data := range value {
 				tC[data.Politicalpartyname]++
 			}
-			fmt.Println("value", tC)
 			var pie *charts.Pie
 			pie = PieChartAgg(tC, fmt.Sprintf("%s(%s)-%s", all[2], all[1], all[3]), true)
 			allCharts = append(allCharts, pie)
@@ -204,6 +246,28 @@ func main() {
 		CreateHTML(value, fileName)
 	}
 
+	for key, value := range stateLevelChartMap {
+		all := strings.Split(key, "__")
+		fileName := fmt.Sprintf("local-level-election/result/%s/", all[0])
+		if _, err := os.Stat(fileName); os.IsNotExist(err) {
+			err := os.MkdirAll(fileName, os.ModePerm)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+		CreateHTML(value, fileName)
+	}
+
+	for _, value := range countryLevelChartMap {
+		fileName := fmt.Sprintf("local-level-election/result/")
+		if _, err := os.Stat(fileName); os.IsNotExist(err) {
+			err := os.MkdirAll(fileName, os.ModePerm)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+		CreateHTML(value, fileName)
+	}
 }
 
 func generatePieItemsAgg(sector map[string]int, isAggregated bool) []opts.PieData {
