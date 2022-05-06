@@ -168,7 +168,7 @@ func main() {
 			tC[data.Politicalpartyname]++
 		}
 		var pie *charts.Pie
-		pie = PieChartAgg(tC, fmt.Sprintf("%s(%s)", all[2], all[1]), true)
+		pie = PieChartAgg(tC, fmt.Sprintf("%s-  %s", all[1], all[2]), true)
 		allCharts = append(allCharts, pie)
 		districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])] = append(districtLevelChartMap[fmt.Sprintf("%s__%s", stateMap[all[0]], all[1])], pie)
 	}
