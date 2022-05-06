@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chromedp/chromedp"
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/components"
 	"github.com/go-echarts/go-echarts/v2/opts"
@@ -56,29 +58,37 @@ var stateMap = map[string]string{
 	"7": "सुदूरपश्चिम प्रदेश",
 }
 
-func main() {
-	electionData, err := ReadAndParseData()
+func CaptureScreenshot(fileName, htmlFileName string) {
+	ctx, cancel := chromedp.NewContext(
+		context.Background(),
+		// chromedp.WithDebugf(log.Printf),
+	)
+	defer cancel()
+	var buf []byte
 
-	if err != nil {
-		fmt.Println(err)
+	// capture entire browser viewport, returning png with quality=90
+	fullpath := fmt.Sprintf("%s/%s", "http://127.0.0.1:5500", htmlFileName)
+	fmt.Println("fullpath", fullpath)
+	// a := "http://127.0.0.1:5500/local-level-election/result/%E0%A4%B5%E0%A4%BE%E0%A4%97%E0%A5%8D%E0%A4%AE%E0%A4%A4%E0%A5%80%20%E0%A4%AA%E0%A5%8D%E0%A4%B0%E0%A4%A6%E0%A5%87%E0%A4%B6/%E0%A4%B2%E0%A4%B2%E0%A4%BF%E0%A4%A4%E0%A4%AA%E0%A5%81%E0%A4%B0/%E0%A4%B2%E0%A4%B2%E0%A4%BF%E0%A4%A4%E0%A4%AA%E0%A5%81%E0%A4%B0%20%E0%A4%AE%E0%A4%B9%E0%A4%BE%E0%A4%A8%E0%A4%97%E0%A4%B0%E0%A4%AA%E0%A4%BE%E0%A4%B2%E0%A4%BF%E0%A4%95%E0%A4%BE/result.html"
+	if err := chromedp.Run(ctx, fullScreenshot(fullpath, 90, &buf)); err != nil {
+		log.Fatal(err)
 	}
-	// JSON Data to Map
-	CreateMapData(electionData)
+	if err := ioutil.WriteFile(fmt.Sprintf("%s%s.png", fileName, "result"), buf, 0o644); err != nil {
+		log.Fatal(err)
+	}
 
-	CreateWinChartCountryLevel()
-	CreateWinChartProvienceLevel()
-	CreateWinChartDistrictLevel()
+	log.Printf("wrote elementScreenshot.png and fullScreenshot.png")
+}
 
-	MainChartAndCSV()
+func fullScreenshot(urlstr string, quality int, res *[]byte) chromedp.Tasks {
+	return chromedp.Tasks{
+		chromedp.Navigate(urlstr),
+		chromedp.FullScreenshot(res, quality),
+	}
+}
 
-	CreateWinChartLocalLevel()
-
-	CreateWardChart()
-
-	MakeLocalLevelChart()
-	MakeDistrictLevelChart()
-	MakeStateLevelChart()
-	MakeCountryLevelChart()
+func main() {
+	CreateDataAndChart()
 }
 
 func generatePieItemsAgg(sector map[string]int, isAggregated bool) []opts.PieData {
@@ -147,40 +157,8 @@ func CreateHTML(pieChart []*charts.Pie, fileName string) {
 		log.Fatal(err)
 	}
 	page.Render(f)
+	CaptureScreenshot(fileName, htmlFileName)
 }
-
-// func CaptureScreenshot(fileName, htmlFileName string) {
-// 	ctx, cancel := chromedp.NewContext(
-// 		context.Background(),
-// 		// chromedp.WithDebugf(log.Printf),
-// 	)
-// 	defer cancel()
-// 	var buf []byte
-// 	path, err := os.Getwd()
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	fmt.Println("path", path)
-
-// 	// capture entire browser viewport, returning png with quality=90
-// 	fullpath := fmt.Sprintf("%s/%s", path, htmlFileName)
-// 	fmt.Println("f", fullpath)
-// 	if err := chromedp.Run(ctx, fullScreenshot(fullpath, 90, &buf)); err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	if err := ioutil.WriteFile(fmt.Sprintf("%s%s.png", fileName, "result"), buf, 0o644); err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	log.Printf("wrote elementScreenshot.png and fullScreenshot.png")
-// }
-
-// func fullScreenshot(urlstr string, quality int, res *[]byte) chromedp.Tasks {
-// 	return chromedp.Tasks{
-// 		chromedp.Navigate(urlstr),
-// 		chromedp.FullScreenshot(res, quality),
-// 	}
-// }
 
 func ReadAndParseData() ([]ElectionData, error) {
 	jsonFile, err := os.Open("./local-level-election/raw/alldata.json")
@@ -379,4 +357,29 @@ func MakeCountryLevelChart() {
 		MakeFolder(fileName)
 		CreateHTML(value, fileName)
 	}
+}
+
+func CreateDataAndChart() {
+	electionData, err := ReadAndParseData()
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	// JSON Data to Map
+	CreateMapData(electionData)
+
+	CreateWinChartCountryLevel()
+	CreateWinChartProvienceLevel()
+	CreateWinChartDistrictLevel()
+
+	MainChartAndCSV()
+
+	CreateWinChartLocalLevel()
+
+	CreateWardChart()
+
+	MakeLocalLevelChart()
+	MakeDistrictLevelChart()
+	MakeStateLevelChart()
+	MakeCountryLevelChart()
 }
